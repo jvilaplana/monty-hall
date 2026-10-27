@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>El problema de les 3 portes</title>
+<style>
+  :root {
+    --bg: #f6f3ec;
+    --ink: #1f2328;
+    --muted: #6b6f76;
+    --wall: #5b9a50;
+    --floor: #c4623a;
+    --frame: #c7cbc4;
+    --accent: #f0a035;
+    --card: #ffffff;
+    --line: #e2ddd2;
+    --ok: #2f8f4e;
+    --ko: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 18px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+  }
+  button { font: inherit; cursor: pointer; }
+
+  /* ---------- Diapositives ---------- */
+  .deck { position: relative; height: 100%; }
+  .slide {
+    position: absolute; inset: 0 0 64px 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 28px; padding: 32px 24px;
+    opacity: 0; pointer-events: none; transform: translateX(40px);
+    transition: opacity .35s ease, transform .35s ease;
+    overflow-y: auto;
+  }
+  .slide.active { opacity: 1; pointer-events: auto; transform: none; }
+  .slide.prev { transform: translateX(-40px); }
+  h1 { font-size: clamp(40px, 7vw, 84px); margin: 0; letter-spacing: -0.02em; text-align: center; }
+  h2 { font-size: clamp(26px, 3.6vw, 42px); margin: 0; text-align: center; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: clamp(17px, 2vw, 22px); text-align: center; max-width: 760px; margin: 0; }
+  .hint { color: var(--muted); font-size: 15px; }
+  kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; background: var(--card); font-size: 14px; }
+
+  .nav {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 64px;
+    display: flex; align-items: center; justify-content: center; gap: 16px;
+    border-top: 1px solid var(--line); background: rgba(246,243,236,.92);
+  }
+  .nav button {
+    border: 1px solid var(--line); background: var(--card); border-radius: 999px;
+    width: 42px; height: 42px; font-size: 20px; line-height: 1;
+  }
+  .nav button:disabled { opacity: .35; cursor: default; }
+  .dots { display: flex; gap: 8px; }
+  .dots span { width: 9px; height: 9px; border-radius: 50%; background: var(--line); cursor: pointer; }
+  .dots span.on { background: var(--accent); }
+
+  /* ---------- Escenari i portes ---------- */
+  .stage {
+    position: relative;
+    background: var(--wall);
+    border-bottom: 18px solid var(--floor);
+    padding: 44px 34px 0;
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 32px;
+    max-width: min(940px, 100%);
+    border-radius: 6px 6px 0 0;
+  }
+  .door-wrap {
+    --w: 130px; --h: 220px;
+    position: relative; width: var(--w); height: var(--h);
+    background: var(--frame); padding: 10px 10px 0; border-radius: 3px 3px 0 0;
+    perspective: 900px;
+  }
+  .behind {
+    position: absolute; inset: 10px 10px 0;
+    background: #2b2b2b radial-gradient(circle at 50% 70%, #4a4a4a, #1d1d1d);
+    display: flex; align-items: center; justify-content: center;
+    font-size: calc(var(--w) * .5);
+  }
+  .door {
+    position: absolute; inset: 10px 10px 0;
+    background: var(--c, #d64f4a);
+    transform-origin: left center;
+    transform-style: preserve-3d;
+    transition: transform .8s cubic-bezier(.3,.7,.3,1);
+    display: flex; justify-content: center;
+    box-shadow: inset -6px 0 0 rgba(0,0,0,.08);
+  }
+  .door .num {
+    margin-top: 16%;
+    background: #fff; width: 62%; aspect-ratio: 1.05;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: calc(var(--w) * .34); font-family: "Comic Sans MS", "Chalkboard SE", system-ui, sans-serif;
+    box-shadow: 4px 4px 0 #111; height: fit-content;
+    backface-visibility: hidden;
+  }
+  .door .knob {
+    position: absolute; left: 10%; top: 55%;
+    width: calc(var(--w) * .08); aspect-ratio: 1; border-radius: 50%; background: #d8d8d8;
+  }
+  .door-wrap.open .door { transform: rotateY(-105deg); }
+  .door-wrap.clickable { cursor: pointer; }
+  .door-wrap.clickable:hover .door { transform: rotateY(-8deg); }
+  .door-wrap.picked::before {
+    content: "▼"; position: absolute; left: 50%; top: -32px; transform: translateX(-50%);
+    color: var(--accent); font-size: 26px; line-height: 1; text-shadow: 0 1px 0 rgba(0,0,0,.2);
+  }
+  .door-wrap.final { outline: 5px solid var(--accent); outline-offset: 3px; }
+
+  /* portes petites quan n'hi ha moltes */
+  .stage.many { gap: 14px; padding: 30px 20px 0; }
+  .stage.many .door-wrap { --w: 68px; --h: 112px; padding: 5px 5px 0; }
+  .stage.many .behind, .stage.many .door { inset: 5px 5px 0; }
+  .stage.many .door .num { box-shadow: 2px 2px 0 #111; font-size: calc(var(--w) * .28); }
+  .stage.many .door-wrap.picked::before { top: -24px; font-size: 18px; }
+  .stage.tiny { gap: 8px; padding: 24px 14px 0; }
+  .stage.tiny .door-wrap { --w: 38px; --h: 62px; padding: 3px 3px 0; }
+  .stage.tiny .behind, .stage.tiny .door { inset: 3px 3px 0; }
+  .stage.tiny .door .num { box-shadow: 1px 1px 0 #111; font-size: 12px; width: 80%; margin-top: 12%; }
+  .stage.tiny .door .knob { display: none; }
+  .stage.tiny .door-wrap.picked::before { top: -18px; font-size: 13px; }
+  .stage.tiny .door-wrap.final { outline-width: 3px; outline-offset: 1px; }
+
+  /* ---------- Diapositives il·lustrades ---------- */
+  .big-emoji { font-size: clamp(120px, 22vw, 230px); line-height: 1; filter: drop-shadow(0 10px 18px rgba(0,0,0,.18)); }
+  .goats { display: flex; gap: clamp(30px, 10vw, 140px); align-items: center; position: relative; }
+  .goats .big-emoji { transform: scaleX(-1); }
+  .youmad { position: absolute; left: 50%; top: -6px; transform: translateX(-50%) rotate(-14deg);
+    font-family: "Bradley Hand", "Segoe Print", cursive; color: #aaa; font-size: 22px; white-space: nowrap; }
+
+  .vote { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+  .vote button {
+    border: 2px solid var(--line); background: var(--card); border-radius: 14px;
+    padding: 18px 26px; min-width: 200px; font-size: 20px; font-weight: 600;
+    transition: border-color .2s, transform .2s;
+  }
+  .vote button:hover { transform: translateY(-2px); }
+  .vote button.on { border-color: var(--accent); background: #fff6e8; }
+
+  #explain { justify-content: flex-start; padding-top: 22px; gap: 18px; }
+  .explain {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
+    width: min(1100px, 100%); font-size: 16px;
+  }
+  .explain .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; }
+  .explain h3 { margin: 0 0 8px; font-size: 18px; }
+  .explain p { margin: 6px 0; }
+  .explain ol { margin: 0; padding-left: 20px; }
+  .explain li { margin: 4px 0; }
+  .explain .result { margin-top: 10px; padding: 8px 12px; background: #fff6e8; border-radius: 8px; text-align: center; }
+  .explain .formula { text-align: center; font-weight: 600; background: #faf8f3; border-radius: 8px; padding: 6px; }
+  .cases { width: 100%; border-collapse: collapse; }
+  .cases th, .cases td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: center; }
+  .cases th { color: var(--muted); font-weight: 600; }
+  .cases td.ok { color: var(--ok); }
+  .cases td.ko { color: var(--ko); }
+  .cases tfoot td { font-weight: 700; border-bottom: 0; }
+  @media (max-width: 760px) { .explain { grid-template-columns: 1fr; } }
+
+  /* ---------- Joc ---------- */
+  #game { justify-content: flex-start; padding-top: 22px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; justify-content: center;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 18px; font-size: 16px;
+  }
+  .controls label { display: flex; align-items: center; gap: 8px; }
+  .controls select, .controls input[type=number] {
+    font: inherit; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  }
+  .controls input[type=number] { width: 76px; }
+  .btn {
+    border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 8px 16px; font-weight: 600;
+  }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .btn.alt { background: var(--accent); color: #1f2328; border-color: var(--accent); }
+  .msg { min-height: 2.9em; font-size: clamp(18px, 2.2vw, 24px); text-align: center; max-width: 820px; margin: 0; }
+  .msg .ok { color: var(--ok); font-weight: 700; }
+  .msg .ko { color: var(--ko); font-weight: 700; }
+  .actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; min-height: 44px; }
+
+  .tally { border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 16px; }
+  .tally th, .tally td { padding: 7px 16px; text-align: right; border-bottom: 1px solid var(--line); }
+  .tally th:first-child, .tally td:first-child { text-align: left; }
+  .tally thead th { background: #faf8f3; font-weight: 600; color: var(--muted); }
+  .tally tr:last-child td { border-bottom: 0; }
+  .tally-box { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .tally-box .hint { text-align: center; }
+
+  @media (max-width: 640px) {
+    body { font-size: 16px; }
+    .door-wrap { --w: 84px; --h: 142px; padding: 6px 6px 0; }
+    .behind, .door { inset: 6px 6px 0 !important; }
+    .stage { gap: 14px; padding: 26px 14px 0; }
+  }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <!-- 1. Portada -->
+  <section class="slide">
+    <h1>El problema de les 3 portes</h1>
+    <p class="hint">Avança amb <kbd>→</kbd> / <kbd>espai</kbd>, retrocedeix amb <kbd>←</kbd>, pantalla completa amb <kbd>F</kbd></p>
+  </section>
+
+  <!-- 2. Tres portes -->
+  <section class="slide">
+    <h2>Tens davant tres portes tancades</h2>
+    <div class="stage" data-demo="none"></div>
+  </section>
+
+  <!-- 3. El premi -->
+  <section class="slide">
+    <h2>Darrere d'una d'elles hi ha un premi</h2>
+    <div class="big-emoji" aria-label="Tresor">💰</div>
+    <p class="sub">Un tresor fabulós…</p>
+  </section>
+
+  <!-- 4. Les cabres -->
+  <section class="slide">
+    <h2>…i darrere de les altres dues, una cabra</h2>
+    <div class="goats">
+      <span class="youmad">You mad?</span>
+      <div class="big-emoji" aria-label="Cabra">🐐</div>
+      <div class="big-emoji" aria-label="Cabra">🐐</div>
+    </div>
+  </section>
+
+  <!-- 5. Tries una porta -->
+  <section class="slide">
+    <h2>Tries una porta: per exemple, la 1</h2>
+    <div class="stage" data-demo="pick"></div>
+  </section>
+
+  <!-- 6. El presentador obre una porta -->
+  <section class="slide">
+    <h2>El presentador, que sap on és el premi, obre una altra porta…</h2>
+    <div class="stage" data-demo="open"></div>
+    <p class="sub">…i hi ha una cabra. Llavors et pregunta: <b>et quedes la porta 1 o canvies a la porta 2?</b></p>
+  </section>
+
+  <!-- 7. Què faries? -->
+  <section class="slide">
+    <h2>Què faries tu?</h2>
+    <div class="vote" id="vote">
+      <button>✋ Em quedo la 1</button>
+      <button>🔄 Canvio a la 2</button>
+      <button>🤷 És igual</button>
+    </div>
+    <p class="sub">Vota abans de continuar.</p>
+  </section>
+
+  <!-- 8. Explicació -->
+  <section class="slide" id="explain">
+    <h2>Per què convé canviar?</h2>
+    <div class="explain">
+      <div class="card">
+        <h3>El raonament</h3>
+        <ol>
+          <li>Quan tries, la teva porta té el premi amb probabilitat <b>1/3</b>. Les altres dues, juntes, <b>2/3</b>.</li>
+          <li>El presentador <b>sap</b> on és el premi i <b>sempre</b> obre una porta amb cabra. Això no aporta cap informació sobre la teva porta: continua tenint <b>1/3</b>.</li>
+          <li>Els <b>2/3</b> de les altres dues portes es concentren ara en l'única que queda tancada.</li>
+        </ol>
+        <p class="result">Mantenir: <b>1/3 ≈ 33 %</b> · Canviar: <b>2/3 ≈ 67 %</b></p>
+      </div>
+      <div class="card">
+        <h3>Tots els casos (tries la porta 1)</h3>
+        <table class="cases">
+          <thead><tr><th>Premi a</th><th>Obre</th><th>Si mantens</th><th>Si canvies</th></tr></thead>
+          <tbody>
+            <tr><td>Porta 1</td><td>2 o 3</td><td class="ok">💰 guanyes</td><td class="ko">🐐 perds</td></tr>
+            <tr><td>Porta 2</td><td>3</td><td class="ko">🐐 perds</td><td class="ok">💰 guanyes</td></tr>
+            <tr><td>Porta 3</td><td>2</td><td class="ko">🐐 perds</td><td class="ok">💰 guanyes</td></tr>
+          </tbody>
+          <tfoot><tr><td colspan="2">Probabilitat</td><td>1/3</td><td>2/3</td></tr></tfoot>
+        </table>
+      </div>
+      <div class="card">
+        <h3>Generalitzacions</h3>
+        <p><b>N portes</b> (el presentador n'obre N − 2 amb cabra): mantenir guanya amb <b>1/N</b>, canviar amb <b>(N − 1)/N</b>. Amb 100 portes, canviar guanya el 99 % de les vegades.</p>
+        <p><b>Presentador que obre a l'atzar</b>: si per casualitat surt cabra, les dues portes tancades són igual de probables:
+          P(premi a la teva | cabra) = (1/3) / (2/3) = <b>1/2</b>. Canviar ja no ajuda.</p>
+      </div>
+      <div class="card">
+        <h3>I a la pràctica?</h3>
+        <p>Si jugues moltes partides, el percentatge d'encerts de cada estratègia s'acosta a la probabilitat teòrica (<b>llei dels grans nombres</b>):</p>
+        <p class="formula">% encerts = partides guanyades ÷ partides jugades → probabilitat</p>
+        <p>Al joc següent, la columna <i>Teòric</i> mostra el valor esperat per comparar-lo amb els teus resultats.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9. Joc -->
+  <section class="slide" id="game">
+    <h2>Ara juga-hi tu</h2>
+    <div class="controls">
+      <label>Portes <input type="number" id="cfgN" min="3" max="100" value="3"></label>
+      <label>Presentador
+        <select id="cfgMode">
+          <option value="sap">Sap on és el premi</option>
+          <option value="atzar">Obre a l'atzar</option>
+        </select>
+      </label>
+      <button class="btn" id="btnNew">Nova partida</button>
+    </div>
+    <p class="msg" id="msg"></p>
+    <div class="actions" id="actions"></div>
+    <div class="stage" id="gameStage"></div>
+    <div class="tally-box">
+      <table class="tally">
+        <thead><tr><th>Estratègia</th><th>Partides</th><th>Guanyades</th><th>% encerts</th><th>Teòric</th></tr></thead>
+        <tbody id="tallyBody"></tbody>
+      </table>
+      <p class="hint" id="tallyHint"></p>
+      <button class="btn" id="btnReset">Esborra el recompte</button>
+    </div>
+  </section>
+
+</div>
+
+<nav class="nav">
+  <button id="prev" aria-label="Anterior">←</button>
+  <div class="dots" id="dots"></div>
+  <button id="next" aria-label="Següent">→</button>
+</nav>
+
+<script>
+(() => {
+  const COLORS = ["#d64f4a", "#f5cf58", "#6a5af0", "#3fa7c9", "#e98a3b", "#9c5ad1", "#58b36b", "#e46fa5"];
+  const doorColor = i => COLORS[i % COLORS.length];
+
+  function makeDoor(i, content) {
+    const wrap = document.createElement("div");
+    wrap.className = "door-wrap";
+    wrap.style.setProperty("--c", doorColor(i));
+    wrap.innerHTML =
+      `<div class="behind">${content ?? ""}</div>` +
+      `<div class="door"><span class="num">${i + 1}</span><span class="knob"></span></div>`;
+    return wrap;
+  }
+
+  // ---------- Diapositives il·lustrades ----------
+  document.querySelectorAll(".stage[data-demo]").forEach(stage => {
+    const demo = stage.dataset.demo;
+    const contents = ["", "", "🐐"];
+    const doors = contents.map((c, i) => makeDoor(i, c));
+    doors.forEach(d => stage.appendChild(d));
+    if (demo === "pick" || demo === "open") doors[0].classList.add("picked");
+    if (demo === "open") stage._onShow = () => {
+      doors[2].classList.remove("open");
+      setTimeout(() => doors[2].classList.add("open"), 450);
+    };
+  });
+
+  document.querySelectorAll("#vote button").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll("#vote button").forEach(x => x.classList.toggle("on", x === b));
+  }));
+
+  // ---------- Navegació ----------
+  const slides = [...document.querySelectorAll(".slide")];
+  const dots = document.getElementById("dots");
+  let cur = 0;
+  slides.forEach((_, i) => {
+    const d = document.createElement("span");
+    d.addEventListener("click", () => go(i));
+    dots.appendChild(d);
+  });
+  function go(i) {
+    i = Math.max(0, Math.min(slides.length - 1, i));
+    cur = i;
+    slides.forEach((s, k) => {
+      s.classList.toggle("active", k === i);
+      s.classList.toggle("prev", k < i);
+    });
+    [...dots.children].forEach((d, k) => d.classList.toggle("on", k === i));
+    document.getElementById("prev").disabled = i === 0;
+    document.getElementById("next").disabled = i === slides.length - 1;
+    slides[i].querySelectorAll(".stage").forEach(s => s._onShow && s._onShow());
+    history.replaceState(null, "", "#" + (i + 1));
+  }
+  document.getElementById("prev").addEventListener("click", () => go(cur - 1));
+  document.getElementById("next").addEventListener("click", () => go(cur + 1));
+  document.addEventListener("keydown", e => {
+    if (e.target.matches("input, select")) return;
+    if (["ArrowRight", "PageDown", " "].includes(e.key)) { e.preventDefault(); go(cur + 1); }
+    else if (["ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); go(cur - 1); }
+    else if (e.key === "Home") go(0);
+    else if (e.key === "End") go(slides.length - 1);
+    else if (e.key.toLowerCase() === "f") {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen?.();
+    }
+  });
+
+  // ---------- Joc ----------
+  const $ = id => document.getElementById(id);
+  const stage = $("gameStage"), msg = $("msg"), actions = $("actions");
+  const rand = n => Math.floor(Math.random() * n);
+  const tallies = {};   // clau "n|mode" -> {mant:{p,g}, canv:{p,g}, anul}
+  let g = null;         // partida actual
+
+  function config() {
+    let n = parseInt($("cfgN").value, 10);
+    if (!Number.isFinite(n)) n = 3;
+    n = Math.max(3, Math.min(100, n));
+    $("cfgN").value = n;
+    return { n, mode: $("cfgMode").value };
+  }
+  const key = c => `${c.n}|${c.mode}`;
+  function tally(c) {
+    return tallies[key(c)] ??= { mant: { p: 0, g: 0 }, canv: { p: 0, g: 0 }, anul: 0 };
+  }
+
+  function newGame() {
+    const c = config();
+    g = { ...c, prize: rand(c.n), choice: null, kept: null, phase: "choose", doors: [] };
+    stage.innerHTML = "";
+    stage.classList.toggle("many", c.n > 3 && c.n <= 20);
+    stage.classList.toggle("tiny", c.n > 20);
+    for (let i = 0; i < c.n; i++) {
+      const d = makeDoor(i, i === g.prize ? "💰" : "🐐");
+      d.classList.add("clickable");
+      d.addEventListener("click", () => onDoor(i));
+      stage.appendChild(d);
+      g.doors.push(d);
+    }
+    msg.textContent = `Tria una porta. Darrere d'una hi ha el premi; darrere de les altres ${c.n - 1}, cabres.`;
+    actions.innerHTML = "";
+    renderTally();
+  }
+
+  function onDoor(i) {
+    if (!g) return;
+    if (g.phase === "choose") choose(i);
+    else if (g.phase === "decide" && (i === g.choice || i === g.kept)) decide(i !== g.choice);
+  }
+
+  function choose(i) {
+    g.choice = i;
+    g.phase = "opening";
+    g.doors.forEach((d, k) => { d.classList.remove("clickable"); d.classList.toggle("picked", k === i); });
+
+    const others = [...Array(g.n).keys()].filter(k => k !== i);
+    if (g.mode === "sap") {
+      // El presentador deixa tancada la porta del premi (o una a l'atzar si l'has encertada)
+      g.kept = i === g.prize ? others[rand(others.length)] : g.prize;
+    } else {
+      g.kept = others[rand(others.length)];
+    }
+    const toOpen = others.filter(k => k !== g.kept);
+    const plural = toOpen.length > 1;
+    msg.textContent = g.mode === "sap"
+      ? `El presentador, que sap on és el premi, obre ${plural ? toOpen.length + " portes" : "una porta"}…`
+      : `El presentador, que no sap on és el premi, obre ${plural ? toOpen.length + " portes" : "una porta"} a l'atzar…`;
+
+    const step = Math.min(250, 1200 / toOpen.length);
+    toOpen.forEach((k, idx) => setTimeout(() => g.doors[k].classList.add("open"), 400 + idx * step));
+    setTimeout(afterOpen, 400 + toOpen.length * step + 700);
+  }
+
+  function afterOpen() {
+    const revealedPrize = g.prize !== g.choice && g.prize !== g.kept;
+    if (revealedPrize) {
+      g.phase = "done";
+      tally(g).anul++;
+      msg.innerHTML = `Ups! El presentador ha obert la porta del premi. <b>Aquesta partida queda anul·lada</b> (no compta per a cap estratègia).`;
+      g.doors.forEach(d => d.classList.add("open"));
+      actions.innerHTML = "";
+      actions.appendChild(button("Nova partida", "primary", newGame));
+      renderTally();
+      return;
+    }
+    g.phase = "decide";
+    const opened = g.n - 2;
+    msg.innerHTML = `${opened > 1 ? "Totes les portes obertes tenen" : "La porta oberta té"} una cabra. ` +
+      `Queden tancades la <b>${g.choice + 1}</b> (la teva) i la <b>${g.kept + 1}</b>. Què fas?`;
+    g.doors[g.choice].classList.add("clickable");
+    g.doors[g.kept].classList.add("clickable");
+    actions.innerHTML = "";
+    actions.appendChild(button(`✋ Em quedo la ${g.choice + 1}`, "primary", () => decide(false)));
+    actions.appendChild(button(`🔄 Canvio a la ${g.kept + 1}`, "alt", () => decide(true)));
+  }
+
+  function decide(switched) {
+    g.phase = "done";
+    const final = switched ? g.kept : g.choice;
+    const win = final === g.prize;
+    const t = tally(g)[switched ? "canv" : "mant"];
+    t.p++; if (win) t.g++;
+    g.doors.forEach((d, k) => {
+      d.classList.remove("clickable", "picked");
+      d.classList.toggle("final", k === final);
+      d.classList.add("open");
+    });
+    msg.innerHTML = `Has ${switched ? "canviat a" : "mantingut"} la porta ${final + 1}… ` +
+      (win ? `<span class="ok">Has guanyat el premi! 💰</span>` : `<span class="ko">Una cabra! 🐐</span> El premi era a la porta ${g.prize + 1}.`);
+    actions.innerHTML = "";
+    actions.appendChild(button("Torna a jugar", "primary", newGame));
+    renderTally();
+  }
+
+  function button(label, kind, fn) {
+    const b = document.createElement("button");
+    b.className = "btn " + kind;
+    b.textContent = label;
+    b.addEventListener("click", fn);
+    return b;
+  }
+
+  function renderTally() {
+    const c = config();
+    const t = tally(c);
+    const pct = x => (100 * x).toFixed(1) + " %";
+    // Probabilitats teòriques (en mode atzar, condicionades a que no surti el premi)
+    const theo = c.mode === "sap" ? { mant: 1 / c.n, canv: (c.n - 1) / c.n } : { mant: 0.5, canv: 0.5 };
+    const row = (name, s, th) => `<tr><td>${name}</td><td>${s.p}</td><td>${s.g}</td><td>${s.p ? pct(s.g / s.p) : "—"}</td><td>${pct(th)}</td></tr>`;
+    $("tallyBody").innerHTML = row("✋ Mantenir", t.mant, theo.mant) + row("🔄 Canviar", t.canv, theo.canv) +
+      (c.mode === "atzar" ? `<tr><td>Anul·lades</td><td>${t.anul}</td><td></td><td></td><td></td></tr>` : "");
+    $("tallyHint").textContent = `Recompte per a ${c.n} portes, presentador que ${c.mode === "sap" ? "sap on és el premi" : "obre a l'atzar"}.`;
+  }
+
+  $("btnNew").addEventListener("click", newGame);
+  $("cfgN").addEventListener("change", newGame);
+  $("cfgMode").addEventListener("change", newGame);
+  $("btnReset").addEventListener("click", () => { delete tallies[key(config())]; renderTally(); });
+
+  newGame();
+  const start = parseInt(location.hash.slice(1), 10);
+  go(Number.isFinite(start) ? start - 1 : 0);
+})();
+</script>
+</body>
+</html>
